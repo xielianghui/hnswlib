@@ -214,24 +214,34 @@ class L2Space : public SpaceInterface<float> {
     L2Space(size_t dim) {
         fstdistfunc_ = L2Sqr;
 #if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
-    #if defined(USE_AVX512)
-        if (AVX512Capable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX512;
-        else if (AVXCapable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
-    #elif defined(USE_AVX)
-        if (AVXCapable())
-            L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
-    #endif
+#if defined(USE_AVX512)
+        if (AVX512Capable()) {
+          L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX512;
+          std::cout << "L2SqrSIMD16ExtAVX512" << std::endl;
+        } else if (AVXCapable()) {
+          L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
+          std::cout << "L2SqrSIMD16ExtAVX" << std::endl;
+        }
+#elif defined(USE_AVX)
+        if (AVXCapable()) {
+          L2SqrSIMD16Ext = L2SqrSIMD16ExtAVX;
+          std::cout << "L2SqrSIMD16ExtAVX" << std::endl;
+        }
+#endif
 
-        if (dim % 16 == 0)
-            fstdistfunc_ = L2SqrSIMD16Ext;
-        else if (dim % 4 == 0)
-            fstdistfunc_ = L2SqrSIMD4Ext;
-        else if (dim > 16)
-            fstdistfunc_ = L2SqrSIMD16ExtResiduals;
-        else if (dim > 4)
-            fstdistfunc_ = L2SqrSIMD4ExtResiduals;
+        if (dim % 16 == 0) {
+          fstdistfunc_ = L2SqrSIMD16Ext;
+          std::cout << "L2SqrSIMD16Ext" << std::endl;
+        } else if (dim % 4 == 0) {
+          fstdistfunc_ = L2SqrSIMD4Ext;
+          std::cout << "L2SqrSIMD4Ext" << std::endl;
+        } else if (dim > 16) {
+          fstdistfunc_ = L2SqrSIMD16ExtResiduals;
+          std::cout << "L2SqrSIMD16ExtResiduals" << std::endl;
+        } else if (dim > 4) {
+          fstdistfunc_ = L2SqrSIMD4ExtResiduals;
+          std::cout << "L2SqrSIMD4ExtResiduals" << std::endl;
+        }
 #endif
         dim_ = dim;
         data_size_ = dim * sizeof(float);
