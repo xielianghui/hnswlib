@@ -109,14 +109,29 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             HNSWERR << "         Cap to 10000 will be applied for the rest of the processing." << std::endl;
             M_ = 10000;
         }
+        // 节点最大近邻数
         maxM_ = M_;
+        // 节点第 0 层的最大近邻数
         maxM0_ = M_ * 2;
+        // 构建索引的最大候选邻居数量，显然是不能低于最大近邻数
         ef_construction_ = std::max(ef_construction, M_);
+        // 查询索引时的最大候选邻居数量
         ef_ = 10;
-
+        // 新插入节点插入 level 随机生成器
         level_generator_.seed(random_seed);
         update_probability_generator_.seed(random_seed + 1);
 
+        /*
+          // link list in level 0
+          links_level0_: links_count(4B) + [internal_id(4B)] +
+          [internal_id(4B)] + ...
+
+          // element in level 0
+          data_per_element_: links_level0_ + element_data + labeltype(8B,
+          DELETE_MARK)
+
+          data_level0_memory_: [data_per_element_] + [data_per_element_] + ...
+        */
         size_links_level0_ = maxM0_ * sizeof(tableint) + sizeof(linklistsizeint);
         size_data_per_element_ = size_links_level0_ + data_size_ + sizeof(labeltype);
         offsetData_ = size_links_level0_;
@@ -135,6 +150,20 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         enterpoint_node_ = -1;
         maxlevel_ = -1;
 
+        /*
+          // element in link list
+          links_per_element_: links_count(4B) + [internal_id(4B)] +
+          [internal_id(4B)] + ...
+
+          linkLists_[max_elements_ - 1]: [level_0 links_per_element_] + [level_1
+          links_per_element_] + ...
+               .
+               .
+               .
+          linkLists_[1]: [level_0 links_per_element_] + [level_1
+          links_per_element_] + ... linkLists_[0]: [level_0 links_per_element_]
+          + [level_1 links_per_element_] + ...
+        */
         linkLists_ = (char **) malloc(sizeof(void *) * max_elements_);
         if (linkLists_ == nullptr)
             throw std::runtime_error("Not enough memory: HierarchicalNSW failed to allocate linklists");
@@ -227,7 +256,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         VisitedList *vl = visited_list_pool_->getFreeVisitedList();
         vl_type *visited_array = vl->mass;
         vl_type visited_array_tag = vl->curV;
-
+        
+        // 大顶堆 堆顶是距离最远的节点
         std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> top_candidates;
         std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> candidateSet;
 
@@ -244,6 +274,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         visited_array[ep_id] = visited_array_tag;
 
         while (!candidateSet.empty()) {
+            // candidateSet 写入的是 -dist，实际上就是距离的小顶堆，堆顶距离最近的节点
             std::pair<dist_t, tableint> curr_el_pair = candidateSet.top();
             if ((-curr_el_pair.first) > lowerBound && top_candidates.size() == ef_construction_) {
                 break;
@@ -295,6 +326,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
                         top_candidates.pop();
 
                     if (!top_candidates.empty())
+                        // 最大距离为 lowerBound，只有距离小于 lowerBound 的才可能进入候选
                         lowerBound = top_candidates.top().first;
                 }
             }
@@ -450,6 +482,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         std::priority_queue<std::pair<dist_t, tableint>> queue_closest;
         std::vector<std::pair<dist_t, tableint>> return_list;
         while (top_candidates.size() > 0) {
+            // top_candidates 为大顶堆，堆顶是距离最远的节点，这里进行 reverse 操作
             queue_closest.emplace(-top_candidates.top().first, top_candidates.top().second);
             top_candidates.pop();
         }
@@ -468,6 +501,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
                                         getDataByInternalId(curent_pair.second),
                                         dist_func_param_);
                 if (curdist < dist_to_query) {
+                    // 当前节点如果与某个候选节点的距离小于当前节点和查询节点的距离表示当前节点可能太过于聚集了
                     good = false;
                     break;
                 }
